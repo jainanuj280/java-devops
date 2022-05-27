@@ -2,56 +2,52 @@ pipeline {
     agent any
 
     stages {
-        stage('Checkout') {
+        stage ('Clone') {
             steps {
-                // Get some code from a GitHub repository
-                git 'https://github.com/jainanuj280/java-devops.git'
-            }
-        }
-        
-        stage('Docker Image Build') {
-            steps {
-                sh "touch newfile.war"
-                sh "docker build -t java-docker:${BUILD_NUMBER} ."
+                git branch: 'master', url: "https://github.com/jainanuj280/java-devops.git"
             }
         }
 
-    	stage ('Server'){
-                steps {
-                   rtServer (
-                     id: "jfrog-artifactory",
-                     url: 'http://192.168.33.8:8082/artifactory',
-                     username: 'jenkins',
-                     password: 'Jenkins@123',
-                     bypassProxy: true,
-                     timeout: 300
-                    )
+        stage ('Artifactory configuration') {
+            steps {
+                rtServer (
+                    id: "jfrog-artifactory",
+                    url: "https://daj.jfrog.io/",
+                    credentialsId: "jfrog"
+                )
+            }
+        }
+
+        stage ('Build Docker Image') {
+            steps {
+                script {
+                    docker.build("daj.jfrog.io/docker-local/" + "java-docker:${BUILD_NUMBER}")
                 }
             }
-            
-        stage('Upload'){
-            steps{
-                rtUpload (
-                 serverId:"jfrog-artifactory" ,
-                  spec: '''{
-                   "files": [
-                      {
-                      "pattern": "*.war",
-                      "target": "java-repo"
-                    }
-                    ]
-                   }''',
+        }
+
+        stage ('Push image to Artifactory') {
+            steps {
+                rtDockerPush(
+                    serverId: "jfrog-artifactory",
+                    image: "daj.jfrog.io/docker-local/" + "java-docker:${BUILD_NUMBER}",
+                    // Host:
+                    // On OSX: "tcp://127.0.0.1:1234"
+                    // On Linux can be omitted or null
+                    // host: HOST_NAME,
+                    targetRepo: 'docker-local',
+                    // Attach custom properties to the published artifacts:
+                    // properties: 'project-name=docker1;status=stable'
                 )
             }
         }
-        
-        stage ('Publish build info') {
-            steps {
-                rtPublishBuildInfo (
-                    serverId: "jfrog-artifactory"
-                )
-            }
-        }       
+
+        // stage ('Publish build info') {
+        //     steps {
+        //         rtPublishBuildInfo (
+        //             serverId: "jfrog-artifactory"
+        //         )
+        //     }
+        // }
     }
 }
-
